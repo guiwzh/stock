@@ -520,13 +520,21 @@ if ss.loaded:
     """, unsafe_allow_html=True)
 
     st.subheader("📋 推荐清单")
-    st.caption(f"风格：{profile_label}　|　入围精算：{len(ss.enrich)} 只　|　"
-               f"综合分 ≥72：{int((df['综合分'] >= 72).sum())} 只")
+    hc1, hc2 = st.columns([3, 1])
+    with hc1:
+        st.caption(f"风格：{profile_label}　|　入围精算：{len(ss.enrich)} 只　|　"
+                   f"综合分 ≥72：{int((df['综合分'] >= 72).sum())} 只")
+    with hc2:
+        show_all = st.toggle("显示全部字段", value=False,
+                             help="默认只看核心列（不横向滚动）；打开后展开 PE/PB/动量/RSI 等明细。")
 
-    # —— 展示列定义 ——
-    show_cols = ["代码", "名称", "行业", "最新价", "涨跌幅", "PE", "PB", "ROE",
-                 "净利润同比", "毛利率", "换手率",
+    # —— 展示列定义：默认核心列（综合分/建议在最右、无需横向滚动）——
+    core_cols = ["代码", "名称", "行业", "最新价",
                  "价值分", "技术分", "估值分位", "综合分", "建议"]
+    full_cols = ["代码", "名称", "行业", "最新价", "涨跌幅", "PE", "PB", "ROE",
+                 "净利润同比", "毛利率", "换手率",
+                 "价值分", "技术分", "动量60", "RSI", "均线", "估值分位", "综合分", "建议"]
+    show_cols = full_cols if show_all else core_cols
     available = [c for c in show_cols if c in view.columns]
     show = view[available].reset_index(drop=True).copy()
 
@@ -558,14 +566,16 @@ if ss.loaded:
         "换手率": st.column_config.NumberColumn("换手率", format="%.2f%%", width="small"),
         "价值分": st.column_config.NumberColumn("价值分", format="%.1f", width="small"),
         "技术分": st.column_config.NumberColumn("技术分", format="%.1f", width="small"),
+        "动量60": st.column_config.NumberColumn("60日动量", format="%.1f%%", width="small"),
+        "RSI": st.column_config.NumberColumn("RSI", format="%.0f", width="small"),
+        "均线": st.column_config.TextColumn("均线", width="small"),
         "估值分位": st.column_config.NumberColumn("估值分位", format="%.0f%%", width="small"),
-        "_score_pct": st.column_config.ProgressColumn("综合分", format="%.1f", min_value=0, max_value=100, width="medium", pinned=True),
-        "建议": st.column_config.TextColumn("建议", width="medium", pinned=True),
+        "_score_pct": st.column_config.ProgressColumn("综合分", format="%.1f", min_value=0, max_value=100, width="medium"),
+        "建议": st.column_config.TextColumn("建议", width="medium"),
     }
 
-    # 固定列（综合分→建议）排在最前，Streamlit 会把 pinned 列冻结在左侧始终可见
-    _pinned = ["_score_pct", "建议"]
-    disp_cols = _pinned + [c for c in show.columns if c not in ("综合分", "_score_pct", "建议")]
+    # 展示顺序保持自然，把 raw 综合分 替换成进度条列；综合分→建议 自然落在最右
+    disp_cols = ["_score_pct" if c == "综合分" else c for c in available]
 
     st.dataframe(
         show[disp_cols],
