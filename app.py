@@ -319,10 +319,8 @@ ss.setdefault("enrich_tried", set())
 
 with st.sidebar:
     go = st.button("🚀 拉取 / 刷新全市场数据", type="primary", use_container_width=True)
-    if not ss.get("loaded"):
-        st.info("👈 点击按钮开始选股")
-    else:
-        st.success(f"✅ 已就绪 · {ss.report_date}")
+    if ss.get("loaded"):
+        st.caption(f"📅 报告期：{ss.report_date}")
 
     st.divider()
 
