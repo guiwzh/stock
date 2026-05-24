@@ -406,10 +406,11 @@ def _to_f(d, key):
 
 
 def fetch_fundamentals(progress_cb=None):
-    """业绩报表：自动回退到最近一个可用报告期。
+    """业绩报表：自动回退到最近一个可用报告期，同时拉取同比 ROE（一年前同季度）。
+    返回 (DataFrame, report_date, year_ago_roe_map)。
+    year_ago_roe_map: {code: 年化ROE}，用于检测 ROE 趋势（价值陷阱过滤）。
     progress_cb(detail, percent) 可选进度回调。"""
     today = datetime.date.today()
-    # 候选报告期：当年及上年的季报截止日
     cands = []
     for y in (today.year, today.year - 1):
         for md in ("0331", "0630", "0930", "1231"):
@@ -445,14 +446,36 @@ def fetch_fundamentals(progress_cb=None):
         out["行业"] = df[ind] if ind else ""
         out["报告期"] = d
 
-        # ROE 年化：stock_yjbb_em 的净资产收益率是「累计期」口径（未年化），
-        # 一季报只反映一个季度的盈利。打分阈值与 min_roe 都按年化 ROE 设计，
-        # 故按报告期折算成年化值，保证跨报告期可比、不被季报系统性低估。
-        # （净利润同比/营收同比是同比增速、毛利率是比率，本就可比，不折算。）
+        # ROE 年化
         _ann = {"03": 4.0, "06": 2.0, "09": 4.0 / 3.0, "12": 1.0}.get(d[4:6], 1.0)
         if _ann != 1.0:
             out["ROE"] = out["ROE"] * _ann
-        return out, d
+
+        # —— 拉取一年前同季度 ROE（用于趋势检测）——
+        yago_roe = {}
+        yago_date = str(int(d[:4]) - 1) + d[4:]
+        if yago_date <= today.strftime("%Y%m%d"):
+            try:
+                if progress_cb:
+                    progress_cb(f"同比 ROE {yago_date}…", 0.95)
+                df_yago = _retry_call(lambda: ak.stock_yjbb_em(date=yago_date),
+                                      tries=2, label=f"同比ROE{yago_date}")
+                if df_yago is not None and len(df_yago) >= 100:
+                    code_col = _find_col(df_yago, "股票代码", "代码")
+                    roe_col = _find_col(df_yago, "净资产收益率")
+                    for _, row in df_yago.iterrows():
+                        code = str(row[code_col]).zfill(6)
+                        try:
+                            roe = float(row[roe_col])
+                            if not pd.isna(roe) and _ann != 1.0:
+                                roe *= _ann
+                            yago_roe[code] = roe if not pd.isna(roe) else None
+                        except (ValueError, TypeError):
+                            pass
+            except Exception:
+                pass
+
+        return out, d, yago_roe
     raise RuntimeError("未能获取任何业绩报表数据")
 
 
@@ -765,8 +788,34 @@ def _cashflow_quality(cf_per_share, eps):
     return 1.05        # 现金流超过利润，优秀
 
 
-def score(df):
-    """对合并后的 DataFrame 计算各项分数，原地新增列并返回。"""
+def _trend_quality(roe_now, roe_yago, profit_yoy, revenue_yoy):
+    """基本面趋势质量乘数：ROE 恶化 + 营收净利背离 → 降权。
+    - ROE 同比下滑超 30% → ×0.75（盈利能力在恶化，可能是价值陷阱）
+    - ROE 同比下滑 15~30% → ×0.88
+    - 营收增长(>5%)但净利润负增长(<-10%) → ×0.82（增收不增利，费用失控/减值）
+    - 两者叠加取最低乘数。缺数据不惩罚(×1.0)。
+    """
+    penalty = 1.0
+    # ROE 趋势
+    if (roe_now is not None and roe_yago is not None
+            and not pd.isna(roe_now) and not pd.isna(roe_yago)
+            and roe_now > 0 and roe_yago > 0):
+        change = (roe_now - roe_yago) / roe_yago
+        if change < -0.30:
+            penalty = min(penalty, 0.75)
+        elif change < -0.15:
+            penalty = min(penalty, 0.88)
+    # 营收净利背离
+    if (revenue_yoy is not None and profit_yoy is not None
+            and not pd.isna(revenue_yoy) and not pd.isna(profit_yoy)):
+        if revenue_yoy > 5 and profit_yoy < -10:
+            penalty = min(penalty, 0.82)
+    return penalty
+
+
+def score(df, yago_roe=None):
+    """对合并后的 DataFrame 计算各项分数，原地新增列并返回。
+    yago_roe: 可选 {code: year_ago_ROE}，用于趋势检测。"""
     df = df.copy()
     df["分_ROE"] = df["ROE"].apply(_roe_score)
     df["分_PE"] = df["PE"].apply(_pe_score)
@@ -779,6 +828,13 @@ def score(df):
     df["现金流乘数"] = df.apply(
         lambda r: _cashflow_quality(r.get("每股经营现金流"), r.get("EPS")), axis=1)
 
+    # 趋势质量乘数（ROE恶化 / 营收净利背离 → 价值陷阱降权）
+    yago = yago_roe or {}
+    df["趋势乘数"] = df.apply(
+        lambda r: _trend_quality(
+            r.get("ROE"), yago.get(r["代码"]),
+            r.get("净利润同比"), r.get("营收同比")), axis=1)
+
     df["价值分"] = (
         df["分_ROE"] * VALUE_WEIGHTS["ROE"]
         + df["分_PE"] * VALUE_WEIGHTS["PE"]
@@ -786,7 +842,7 @@ def score(df):
         + df["分_净利增长"] * VALUE_WEIGHTS["净利润同比"]
         + df["分_营收增长"] * VALUE_WEIGHTS["营收同比"]
         + df["分_毛利率"] * VALUE_WEIGHTS["毛利率"]
-    ) * df["现金流乘数"]  # 现金流质量调节
+    ) * df["现金流乘数"] * df["趋势乘数"]
     df["价值分"] = df["价值分"].clip(upper=100)  # 封顶
 
     df["分_动量"] = df["动量60"].apply(_mom_score)
@@ -843,7 +899,7 @@ def fetch_market(progress_cb=None):
     spot = fetch_spot(progress_cb=lambda d, p: _cb("行情数据", d, 5 + int(p * 0.60)))
 
     _cb("基本面", "正在拉取最新业绩报表…", 70)
-    fund, report_date = fetch_fundamentals(
+    fund, report_date, yago_roe = fetch_fundamentals(
         progress_cb=lambda d, p: _cb("基本面", d, 70 + int(p * 0.25)))
 
     _cb("打分", "正在计算价值/技术得分…", 95)
@@ -851,7 +907,7 @@ def fetch_market(progress_cb=None):
     # 结构性清洗：有效价 + 仅沪深主板(排除科创板/创业板/北交所/B股)
     df = df[df["最新价"].notna() & (df["最新价"] > 0)]
     df = df[df["代码"].str.match(r"^(60|00)\d{4}$")]
-    df = score(df)
+    df = score(df, yago_roe)
     # 短线风控标记（成交额<=0 视为停牌/无成交；涨跌幅触及主板涨跌停）
     amt = df["成交额"] if "成交额" in df.columns else pd.Series(float("nan"), index=df.index)
     df["停牌"] = ~(pd.to_numeric(amt, errors="coerce") > 0)
