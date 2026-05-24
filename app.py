@@ -112,6 +112,30 @@ h1 {
 [data-testid="stSidebar"] hr {
     border-color: rgba(255,255,255,0.15) !important;
 }
+/* radio / checkbox 文字 */
+[data-testid="stSidebar"] .stRadio label,
+[data-testid="stSidebar"] .stCheckbox label,
+[data-testid="stSidebar"] .stToggle label {
+    color: #e2e8f0 !important;
+}
+/* slider 数值和标签 */
+[data-testid="stSidebar"] .stSlider [data-testid="stThumbValue"],
+[data-testid="stSidebar"] .stSlider label,
+[data-testid="stSidebar"] .stSlider p {
+    color: #e2e8f0 !important;
+}
+/* number input 标签 */
+[data-testid="stSidebar"] .stNumberInput label {
+    color: #e2e8f0 !important;
+}
+/* selectbox 当前值 */
+[data-testid="stSidebar"] .stSelectbox label {
+    color: #e2e8f0 !important;
+}
+/* info / success 提示框 */
+[data-testid="stSidebar"] .stAlert [data-testid="stNotification"] {
+    color: #e2e8f0 !important;
+}
 
 /* ===== Metric 指标卡片 ===== */
 [data-testid="stMetric"] {
