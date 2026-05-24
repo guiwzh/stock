@@ -16,12 +16,8 @@ st.set_page_config(page_title="A股选股助手", page_icon="📈", layout="wide
 st.markdown("""
 <style>
 /* ===== 全局基础 ===== */
-html, body, [class*="st-"] {
+html, body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-}
-/* 保留 Material Icons 字体（expand 箭头等） */
-.material-icons, [class*="st-"] [class*="material-icons"] {
-    font-family: 'Material Icons' !important;
 }
 
 /* ===== 主背景 ===== */
