@@ -71,9 +71,28 @@ h1 {
 [data-testid="stSidebar"] [data-baseweb="select"] [role="combobox"] {
     color: #fff !important;
 }
-/* 数字输入框按钮 */
-[data-testid="stSidebar"] button[tabindex="-1"] {
+/* 数字输入框：容器白底会盖住深色规则 → 强制深底白字（含 baseweb 包裹层）*/
+[data-testid="stSidebar"] [data-testid="stNumberInput"] [data-baseweb="input"],
+[data-testid="stSidebar"] [data-testid="stNumberInput"] [data-baseweb="base-input"],
+[data-testid="stSidebar"] [data-testid="stNumberInput"] input {
+    background: rgba(255,255,255,0.12) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border-color: rgba(255,255,255,0.25) !important;
+}
+[data-testid="stSidebar"] [data-testid="stNumberInput"] input::placeholder {
     color: #cbd5e1 !important;
+}
+/* 数字输入框 +/- 步进按钮：浅色图标 + 透明底，hover 微亮 */
+[data-testid="stSidebar"] [data-testid="stNumberInput"] button {
+    background: rgba(255,255,255,0.06) !important;
+    color: #e2e8f0 !important;
+}
+[data-testid="stSidebar"] [data-testid="stNumberInput"] button:hover {
+    background: rgba(255,255,255,0.18) !important;
+}
+[data-testid="stSidebar"] button[tabindex="-1"] {
+    color: #e2e8f0 !important;
 }
 /* 成功的提示背景深 */
 [data-testid="stSidebar"] .stAlert {
@@ -104,9 +123,52 @@ h1 {
     border-radius: 10px;
     border: 1px solid rgba(255,255,255,0.1);
 }
-[data-testid="stSidebar"] .stExpander summary {
+/* expander 标题：必须比正文更醒目（覆盖上面通用 p 的浅灰色）*/
+[data-testid="stSidebar"] .stExpander summary,
+[data-testid="stSidebar"] details summary,
+[data-testid="stSidebar"] details summary p,
+[data-testid="stSidebar"] details summary span,
+[data-testid="stSidebar"] [data-testid="stExpander"] summary * {
+    color: #f8fafc !important;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+}
+/* 展开/收起箭头也用浅色，避免发灰看不清 */
+[data-testid="stSidebar"] details summary svg {
+    fill: #cbd5e1 !important;
+}
+/* 标题栏背景：透明贴合深色侧栏（默认不再纯白），仅 hover 时微亮 */
+[data-testid="stSidebar"] .stExpander summary,
+[data-testid="stSidebar"] details summary,
+[data-testid="stSidebar"] .streamlit-expanderHeader {
+    background: transparent !important;
+    border: none !important;
+}
+[data-testid="stSidebar"] details summary:hover,
+[data-testid="stSidebar"] .streamlit-expanderHeader:hover {
+    background: rgba(255,255,255,0.10) !important;
+}
+/* 侧边栏右上角「折叠」按钮：深色侧栏上默认看不清，强制浅色 */
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="stSidebarCollapseButton"] svg,
+[data-testid="stSidebarCollapseButton"] span,
+[data-testid="stSidebar"] [data-testid="stBaseButton-headerNoPadding"],
+[data-testid="stSidebar"] [data-testid="stBaseButton-headerNoPadding"] svg,
+[data-testid="stSidebar"] [kind="header"] svg,
+[data-testid="stSidebar"] header button svg {
     color: #e2e8f0 !important;
-    font-weight: 500;
+    fill: #e2e8f0 !important;
+    opacity: 1 !important;
+}
+[data-testid="stSidebarCollapseButton"] button:hover {
+    background: rgba(255,255,255,0.12) !important;
+    border-radius: 8px !important;
+}
+/* 选中的 radio 选项更醒目 */
+[data-testid="stSidebar"] .stRadio [aria-checked="true"] + div,
+[data-testid="stSidebar"] .stRadio label[data-checked="true"] {
+    color: #fff !important;
+    font-weight: 600 !important;
 }
 /* divider */ 
 [data-testid="stSidebar"] hr {
@@ -447,8 +509,8 @@ if ss.loaded:
     available = [c for c in show_cols if c in view.columns]
     show = view[available].reset_index(drop=True).copy()
 
-    # 综合分归一化为 0-100 供 ProgressColumn 使用
-    show["_score_pct"] = show["综合分"].clip(0, 100) / 100.0
+    # ProgressColumn 的 min/max 已是 0-100，直接用原值（勿再 /100，否则条几乎不填充、数值显示成 0.x）
+    show["_score_pct"] = show["综合分"].clip(0, 100)
 
     # 建议列加 emoji
     def _advice_emoji(val):
@@ -477,7 +539,7 @@ if ss.loaded:
         "技术分": st.column_config.NumberColumn("技术分", format="%.1f", width="small"),
         "估值分位": st.column_config.NumberColumn("估值分位", format="%.0f%%", width="small"),
         "_score_pct": st.column_config.ProgressColumn("综合分", format="%.1f", min_value=0, max_value=100, width="medium"),
-        "建议": st.column_config.TextColumn("建议", width="small"),
+        "建议": st.column_config.TextColumn("建议", width="medium"),
     }
 
     disp_cols = [c for c in show.columns if c != "综合分"]
