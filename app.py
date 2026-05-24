@@ -46,15 +46,41 @@ h1 {
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important;
 }
-[data-testid="stSidebar"] .stMarkdown,
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] .stCaption,
-[data-testid="stSidebar"] .stExpander > div > div > p {
-    color: #cbd5e1 !important;
+/* 侧边栏所有文字默认浅色 */
+[data-testid="stSidebar"] {
+    color: #e2e8f0 !important;
 }
 [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
     color: #667eea !important;
 }
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stCaption, [data-testid="stSidebar"] small {
+    color: #cbd5e1 !important;
+}
+/* 输入框：深底白字 */
+[data-testid="stSidebar"] input,
+[data-testid="stSidebar"] [data-baseweb="input"] input,
+[data-testid="stSidebar"] [data-baseweb="select"] [role="combobox"],
+[data-testid="stSidebar"] [data-baseweb="select"] input {
+    background: rgba(255,255,255,0.1) !important;
+    color: #fff !important;
+    border-color: rgba(255,255,255,0.2) !important;
+    border-radius: 8px !important;
+}
+/* 下拉菜单文本 */
+[data-testid="stSidebar"] [data-baseweb="select"] [role="combobox"] {
+    color: #fff !important;
+}
+/* 数字输入框按钮 */
+[data-testid="stSidebar"] button[tabindex="-1"] {
+    color: #cbd5e1 !important;
+}
+/* 成功的提示背景深 */
+[data-testid="stSidebar"] .stAlert {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.15);
+}
+/* 按钮 */
 [data-testid="stSidebar"] .stButton > button {
     background: linear-gradient(135deg, #667eea, #764ba2) !important;
     color: #fff !important;
@@ -67,7 +93,7 @@ h1 {
     transform: translateY(-1px);
     background: linear-gradient(135deg, #764ba2, #667eea) !important;
 }
-/* 侧边栏 expander 内部 */
+/* expander 展开面板 */
 [data-testid="stSidebar"] .stExpander details {
     background: rgba(255,255,255,0.06);
     border-radius: 10px;
@@ -76,6 +102,10 @@ h1 {
 [data-testid="stSidebar"] .stExpander summary {
     color: #e2e8f0 !important;
     font-weight: 500;
+}
+/* divider */ 
+[data-testid="stSidebar"] hr {
+    border-color: rgba(255,255,255,0.15) !important;
 }
 
 /* ===== Metric 指标卡片 ===== */
