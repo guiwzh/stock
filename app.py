@@ -87,11 +87,16 @@ h1 {
     border: none !important;
     border-radius: 10px !important;
     font-weight: 600 !important;
-    transition: all 0.3s ease !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
 }
 [data-testid="stSidebar"] .stButton > button:hover {
-    transform: translateY(-1px);
     background: linear-gradient(135deg, #764ba2, #667eea) !important;
+    transform: translateY(-1px);
+}
+[data-testid="stSidebar"] .stButton > button:active {
+    transform: translateY(0);
+    opacity: 0.9;
 }
 /* expander 展开面板 */
 [data-testid="stSidebar"] .stExpander details {
