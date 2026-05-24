@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  stock:
+    build: .
+    container_name: stock-screener
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    volumes:
+      # 持久化缓存：重启后 baostock 数据不丢失，第二次刷新秒开
+      - ./baostock_data:/app/.baostock_cache
+    environment:
+      - TZ=Asia/Shanghai
+    # 轻量服务器通常内存有限，限制资源
+    deploy:
+      resources:
+        limits:
+          memory: 512M

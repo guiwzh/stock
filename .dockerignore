@@ -1,0 +1,9 @@
+venv/
+.git/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+回测样本.csv
+选股结果.csv
+.claude/
