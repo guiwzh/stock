@@ -4,6 +4,9 @@ LABEL description="A股选股助手 - 价值+技术+估值分位综合打分"
 
 WORKDIR /app
 
+# 使用阿里云 Debian 镜像加速（国内服务器必备）
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
+
 # 安装系统依赖（akshare 需要 lxml 等编译依赖）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ libxml2-dev libxslt-dev \
