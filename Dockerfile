@@ -4,10 +4,17 @@ LABEL description="A股选股助手 - 价值+技术+估值分位综合打分"
 
 WORKDIR /app
 
-# 先装依赖（利用 Docker 缓存层）
-# 使用清华镜像加速，lxml/pandas 等均为预编译 wheel，无需 apt 装编译器
+# 使用阿里云 Debian 镜像加速（国内服务器必备）
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources
+
+# 安装系统依赖（akshare 需要 lxml 等编译依赖）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libxml2-dev libxslt-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 先装依赖（利用 Docker 缓存层，阿里云镜像最快）
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com/pypi/simple
 
 # 复制应用代码
 COPY . .
@@ -17,7 +24,7 @@ RUN mkdir -p /app/.baostock_cache
 
 EXPOSE 8501
 
-# Streamlit 配置：允许外部访问
+# Streamlit 配置：允许外部访问，关闭遥测
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
     STREAMLIT_SERVER_PORT=8501 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
