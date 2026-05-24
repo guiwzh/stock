@@ -32,6 +32,13 @@ html, body {
     border-bottom: 1px solid rgba(0,0,0,0.05);
 }
 
+/* ===== 主区容器：收紧上下留白、限制最大宽度更聚焦 ===== */
+.block-container {
+    padding-top: 2.4rem !important;
+    padding-bottom: 2.5rem !important;
+    max-width: 1500px !important;
+}
+
 /* ===== 主标题 ===== */
 h1 {
     font-size: 1.9rem !important;
@@ -40,6 +47,16 @@ h1 {
     padding-bottom: 0.4rem !important;
     border-bottom: 3px solid #667eea;
     margin-bottom: 0.3rem !important;
+}
+
+/* ===== 主区小标题：左侧靛蓝强调条 ===== */
+.block-container h2, .block-container h3 {
+    color: #1a1a2e !important;
+    font-weight: 700 !important;
+    border-left: 4px solid #667eea;
+    padding-left: 0.6rem !important;
+    margin: 0.6rem 0 0.2rem 0 !important;
+    line-height: 1.3 !important;
 }
 
 /* ===== 侧边栏 ===== */
@@ -202,10 +219,16 @@ h1 {
 /* ===== Metric 指标卡片 ===== */
 [data-testid="stMetric"] {
     background: #fff;
-    border-radius: 12px;
-    padding: 0.8rem 1rem;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+    border-radius: 14px;
+    padding: 0.9rem 1.1rem;
+    border: 1px solid #e8ecf2;
+    border-left: 4px solid #667eea;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+[data-testid="stMetric"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102,126,234,0.15);
 }
 [data-testid="stMetric"] label {
     font-size: 0.75rem !important;
@@ -415,23 +438,21 @@ with st.sidebar:
         topn = st.number_input("展示数量", 10, 500, 50, step=10)
 
 if go:
-    status = st.status("正在拉取全市场数据…", expanded=True)
+    progress_bar = st.progress(0, text="⏳ 连接行情接口…")
     try:
-        progress_bar = st.progress(0, text="⏳ 连接行情接口…")
-
         def progress_cb(step, detail, pct):
-            progress_bar.progress(min(int(pct * 100), 100), text=f"📡 {step}")
+            progress_bar.progress(min(int(pct * 100), 100), text=f"📡 {detail}")
 
         market = screener.fetch_market(progress_cb=progress_cb)
-        progress_bar.progress(100, text="✅ 完成")
         ss.market = market
         ss.report_date = market.attrs.get("report_date")
         ss.enrich = {}          # 新数据 → 清空入围缓存
         ss.enrich_tried = set()
         ss.loaded = True
-        status.update(label=f"✅ 全市场 {len(market)} 只已就绪，可即时筛选", state="complete")
+        progress_bar.empty()    # 完成即移除进度条，避免残留空框
+        st.toast(f"✅ 全市场 {len(market)} 只已就绪，可即时筛选", icon="✅")
     except Exception as e:
-        status.update(label="❌ 数据获取失败", state="error")
+        progress_bar.empty()
         st.error(f"数据获取失败：{e}")
 
 if ss.loaded:
@@ -538,11 +559,13 @@ if ss.loaded:
         "价值分": st.column_config.NumberColumn("价值分", format="%.1f", width="small"),
         "技术分": st.column_config.NumberColumn("技术分", format="%.1f", width="small"),
         "估值分位": st.column_config.NumberColumn("估值分位", format="%.0f%%", width="small"),
-        "_score_pct": st.column_config.ProgressColumn("综合分", format="%.1f", min_value=0, max_value=100, width="medium"),
-        "建议": st.column_config.TextColumn("建议", width="medium"),
+        "_score_pct": st.column_config.ProgressColumn("综合分", format="%.1f", min_value=0, max_value=100, width="medium", pinned=True),
+        "建议": st.column_config.TextColumn("建议", width="medium", pinned=True),
     }
 
-    disp_cols = [c for c in show.columns if c != "综合分"]
+    # 固定列（综合分→建议）排在最前，Streamlit 会把 pinned 列冻结在左侧始终可见
+    _pinned = ["_score_pct", "建议"]
+    disp_cols = _pinned + [c for c in show.columns if c not in ("综合分", "_score_pct", "建议")]
 
     st.dataframe(
         show[disp_cols],
