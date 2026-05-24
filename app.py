@@ -10,6 +10,150 @@ import screener
 
 st.set_page_config(page_title="A股选股助手", page_icon="📈", layout="wide")
 
+# ═══════════════════════════════════════════
+#  全局自定义样式
+# ═══════════════════════════════════════════
+st.markdown("""
+<style>
+/* ===== 全局基础 ===== */
+html, body, [class*="st-"] {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+}
+/* 保留 Material Icons 字体（expand 箭头等） */
+.material-icons, [class*="st-"] [class*="material-icons"] {
+    font-family: 'Material Icons' !important;
+}
+
+/* ===== 主背景 ===== */
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(135deg, #f8fafc 0%, #eef1f5 100%);
+}
+
+/* ===== 顶部标题栏 ===== */
+[data-testid="stHeader"] {
+    background: rgba(255,255,255,0.7);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+/* ===== 主标题 ===== */
+h1 {
+    font-size: 1.9rem !important;
+    font-weight: 700 !important;
+    color: #1a1a2e !important;
+    padding-bottom: 0.4rem !important;
+    border-bottom: 3px solid #667eea;
+    margin-bottom: 0.3rem !important;
+}
+
+/* ===== 侧边栏 ===== */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important;
+}
+[data-testid="stSidebar"] .stMarkdown,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stCaption,
+[data-testid="stSidebar"] .stExpander > div > div > p {
+    color: #cbd5e1 !important;
+}
+[data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+    color: #667eea !important;
+}
+[data-testid="stSidebar"] .stButton > button {
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+    transform: translateY(-1px);
+    background: linear-gradient(135deg, #764ba2, #667eea) !important;
+}
+/* 侧边栏 expander 内部 */
+[data-testid="stSidebar"] .stExpander details {
+    background: rgba(255,255,255,0.06);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+[data-testid="stSidebar"] .stExpander summary {
+    color: #e2e8f0 !important;
+    font-weight: 500;
+}
+
+/* ===== Metric 指标卡片 ===== */
+[data-testid="stMetric"] {
+    background: #fff;
+    border-radius: 12px;
+    padding: 0.8rem 1rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.04);
+}
+[data-testid="stMetric"] label {
+    font-size: 0.75rem !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
+}
+[data-testid="stMetric"] [data-testid="stMetricValue"] {
+    font-size: 1.6rem !important;
+    font-weight: 700 !important;
+    color: #1a1a2e !important;
+}
+
+/* ===== 表格（st.dataframe）===== */
+[data-testid="stDataFrame"] {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+}
+[data-testid="stDataFrame"] thead th {
+    background: #1e293b !important;
+    color: #e2e8f0 !important;
+    font-weight: 600 !important;
+    font-size: 0.8rem !important;
+    padding: 0.6rem 0.5rem !important;
+    text-align: center !important;
+}
+[data-testid="stDataFrame"] tbody td {
+    text-align: center !important;
+    padding: 0.4rem 0.5rem !important;
+    font-size: 0.82rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+[data-testid="stDataFrame"] tbody tr:hover {
+    background: #f1f5f9 !important;
+}
+
+/* ===== 按钮（主区域）===== */
+.stButton > button:not([data-testid="stSidebar"] *) {
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease !important;
+}
+
+/* ===== 展开面板 ===== */
+.streamlit-expanderHeader {
+    background: #fff;
+    border-radius: 10px !important;
+    border: 1px solid #e2e8f0;
+    font-weight: 600 !important;
+    color: #1a1a2e !important;
+}
+
+/* ===== 底部 ===== */
+footer { visibility: hidden; }
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("📈 A股选股助手 · 价值 + 技术 + 估值分位")
 st.caption("综合分 = 价值面 + 技术面 + 估值分位（PB 历史百分位），权重随「投资风格」切换："
            "短线波段 0.15/0.30/0.55，长线价值 0.57/0.31/0.12（技术分统一用反转式，经回测样本外验证）。"
@@ -113,48 +257,58 @@ def load_stock(code):
 _PROFILE_MAP = {"短线波段 (≤3月)": "短线波段", "长线价值": "长线价值"}
 VAL_TOP = 100  # 入围精算的候选数量（按价值分取前 N）
 
-with st.sidebar:
-    st.header("① 数据")
-    go = st.button("🚀 拉取 / 刷新全市场数据", type="primary", use_container_width=True)
-    st.caption("拉一次即可；下面改条件**即时重算**，不再联网。")
-
-    st.header("② 风格与筛选")
-    profile_label = st.radio(
-        "投资风格", list(_PROFILE_MAP.keys()), index=0,
-        help="短线波段：估值分位主导 + 反转式技术（价值0.15/技术0.30/估值0.55，经回测校准），"
-             "适合 ≤3 个月持有，奖励超跌/低估、规避追高；"
-             "长线价值：基本面主导（价值0.57/技术0.31/估值0.12，反转式技术）。")
-    profile = _PROFILE_MAP[profile_label]
-    exclude_st = st.checkbox("排除 ST / 退市股", value=True)
-    exclude_loss = st.checkbox("排除亏损股（PE/EPS≤0）", value=True)
-    min_mktcap = st.slider("最小总市值（亿元）", 0, 1000, 50, step=10)
-    min_roe = st.slider("最低 ROE（%，已年化）", -10, 30, 8, step=1)
-    max_pe = st.slider("最高 PE（动态）", 5, 200, 80, step=5)
-
-    st.header("③ 短线风控")
-    exclude_halt = st.checkbox("剔除停牌 / 无成交", value=True)
-    avoid_limit = st.checkbox("规避当日涨/跌停", value=True,
-                              help="涨跌停次日可能买不进/卖不出，短线宜回避。")
-    min_amount = st.slider("最小成交额（亿元）", 0.0, 20.0, 1.0, step=0.5,
-                           help="成交额过低 3 个月内难进出，设流动性下限。")
-
-    st.header("④ 展示")
-    only_buy = st.checkbox("只看「值得买入」及以上", value=True)
-    topn = st.number_input("展示数量", 10, 500, 50, step=10)
-
 ss = st.session_state
 ss.setdefault("loaded", False)
 ss.setdefault("enrich", {})
 ss.setdefault("enrich_tried", set())
 
+with st.sidebar:
+    go = st.button("🚀 拉取 / 刷新全市场数据", type="primary", use_container_width=True)
+    if not ss.get("loaded"):
+        st.info("👈 点击按钮开始选股")
+    else:
+        st.success(f"✅ 已就绪 · {ss.report_date}")
+
+    st.divider()
+
+    # —— 风格（始终可见）——
+    profile_label = st.radio(
+        "💰 投资风格", list(_PROFILE_MAP.keys()), index=0,
+        help="短线波段：估值分位主导 + 反转式技术（价值0.15/技术0.30/估值0.55，经回测校准）；"
+             "长线价值：基本面主导（价值0.57/技术0.31/估值0.12，反转式技术）。")
+    profile = _PROFILE_MAP[profile_label]
+
+    # —— 基本面筛选（折叠）——
+    with st.expander("📊 基本面筛选", expanded=True):
+        exclude_st = st.checkbox("排除 ST / 退市股", value=True)
+        exclude_loss = st.checkbox("排除亏损股（PE/EPS≤0）", value=True)
+        min_mktcap = st.slider("最小总市值（亿元）", 0, 1000, 50, step=10)
+        min_roe = st.slider("最低 ROE（%，已年化）", -10, 30, 8, step=1)
+        max_pe = st.slider("最高 PE（动态）", 5, 200, 80, step=5)
+
+    # —— 短线风控（折叠）——
+    with st.expander("🛡️ 短线风控", expanded=False):
+        exclude_halt = st.checkbox("剔除停牌 / 无成交", value=True)
+        avoid_limit = st.checkbox("规避当日涨/跌停", value=True,
+                                  help="涨跌停次日可能买不进/卖不出，短线宜回避。")
+        min_amount = st.slider("最小成交额（亿元）", 0.0, 20.0, 1.0, step=0.5,
+                               help="成交额过低 3 个月内难进出，设流动性下限。")
+
+    # —— 展示选项（折叠）——
+    with st.expander("👁️ 展示选项", expanded=False):
+        only_buy = st.checkbox("只看「值得买入」及以上", value=True)
+        topn = st.number_input("展示数量", 10, 500, 50, step=10)
+
 if go:
     status = st.status("正在拉取全市场数据…", expanded=True)
     try:
+        progress_bar = st.progress(0, text="⏳ 连接行情接口…")
+
         def progress_cb(step, detail, pct):
-            status.update(label=f"📡 {step} ({pct}%)", state="running")
-            st.write(f"{detail}")
+            progress_bar.progress(min(int(pct * 100), 100), text=f"📡 {step}")
 
         market = screener.fetch_market(progress_cb=progress_cb)
+        progress_bar.progress(100, text="✅ 完成")
         ss.market = market
         ss.report_date = market.attrs.get("report_date")
         ss.enrich = {}          # 新数据 → 清空入围缓存
@@ -187,46 +341,182 @@ if ss.loaded:
     view = df[df["综合分"] >= 72] if only_buy else df
     view = view.head(int(topn))
 
+    # —— 指标仪表盘 ——
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("财报报告期", rd)
-    c2.metric("筛选后股票数", len(df))
-    c3.metric("达到买入线", int((df["综合分"] >= 72).sum()))
-    c4.metric("更新时间", datetime.datetime.now().strftime("%H:%M"))
+    c1.metric("📅 财报报告期", rd)
+    c2.metric("📊 筛选后股票数", len(df))
+    c3.metric("🎯 达到买入线", int((df["综合分"] >= 72).sum()))
+    c4.metric("🕐 更新时间", datetime.datetime.now().strftime("%H:%M"))
+
+    # —— 推荐等级分布条 ——
+    buy_cnt = int((df["综合分"] >= 72).sum())
+    watch_cnt = int(((df["综合分"] >= 63) & (df["综合分"] < 72)).sum())
+    hold_cnt = int(((df["综合分"] >= 50) & (df["综合分"] < 63)).sum())
+    avoid_cnt = int((df["综合分"] < 50).sum())
+
+    st.markdown(f"""
+    <div style="display:flex; gap:12px; margin:12px 0 16px 0; flex-wrap:wrap;">
+        <div style="flex:1; min-width:120px; background:linear-gradient(135deg, #d4edda, #c3e6cb);
+                    border-radius:12px; padding:12px 16px; text-align:center;
+                    border:1px solid #b7dfb9; box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:1.6rem; font-weight:700; color:#155724;">{buy_cnt}</div>
+            <div style="font-size:0.78rem; color:#2d6a3f; font-weight:500;">🟢 值得买入</div>
+        </div>
+        <div style="flex:1; min-width:120px; background:linear-gradient(135deg, #fff3cd, #ffeeba);
+                    border-radius:12px; padding:12px 16px; text-align:center;
+                    border:1px solid #ffe082; box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:1.6rem; font-weight:700; color:#856404;">{watch_cnt}</div>
+            <div style="font-size:0.78rem; color:#b68b00; font-weight:500;">🟡 可关注</div>
+        </div>
+        <div style="flex:1; min-width:120px; background:linear-gradient(135deg, #ffe5cc, #ffd6a5);
+                    border-radius:12px; padding:12px 16px; text-align:center;
+                    border:1px solid #ffc078; box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:1.6rem; font-weight:700; color:#c6640a;">{hold_cnt}</div>
+            <div style="font-size:0.78rem; color:#d9780f; font-weight:500;">🟠 观望</div>
+        </div>
+        <div style="flex:1; min-width:120px; background:linear-gradient(135deg, #f8d7da, #f1c0c4);
+                    border-radius:12px; padding:12px 16px; text-align:center;
+                    border:1px solid #f1aeb5; box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:1.6rem; font-weight:700; color:#721c24;">{avoid_cnt}</div>
+            <div style="font-size:0.78rem; color:#a1424a; font-weight:500;">🔴 暂不推荐</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.subheader("📋 推荐清单")
-    st.caption(f"风格：{profile_label}　|　入围精算覆盖：{len(ss.enrich)} 只")
-    show_cols = ["代码", "名称", "行业", "最新价", "PE", "PB", "ROE",
-                 "净利润同比", "毛利率", "价值分",
-                 "技术分", "动量60", "RSI", "均线", "估值分位", "综合分", "建议"]
-    show = view[show_cols].reset_index(drop=True)
+    st.caption(f"风格：{profile_label}　|　入围精算：{len(ss.enrich)} 只　|　"
+               f"综合分 ≥72：{int((df['综合分'] >= 72).sum())} 只")
+
+    # —— 展示列定义 ——
+    show_cols = ["代码", "名称", "行业", "最新价", "涨跌幅", "PE", "PB", "ROE",
+                 "净利润同比", "毛利率", "换手率",
+                 "价值分", "技术分", "估值分位", "综合分", "建议"]
+    available = [c for c in show_cols if c in view.columns]
+    show = view[available].reset_index(drop=True).copy()
+
+    # 综合分归一化为 0-100 供 ProgressColumn 使用
+    show["_score_pct"] = show["综合分"].clip(0, 100) / 100.0
+
+    # 建议列加 emoji
+    def _advice_emoji(val):
+        s = str(val)
+        if "强烈" in s:   return "🟢 " + s
+        if "值得买入" in s: return "🟢 " + s
+        if "可关注" in s:   return "🟡 " + s
+        if "观望" in s:    return "🟠 " + s
+        if "暂不" in s:    return "🔴 " + s
+        return "⚪ " + s
+    show["建议"] = show["建议"].apply(_advice_emoji)
+
+    col_cfg = {
+        "代码": st.column_config.TextColumn("代码", width="small"),
+        "名称": st.column_config.TextColumn("名称", width="small"),
+        "行业": st.column_config.TextColumn("行业", width="small"),
+        "最新价": st.column_config.NumberColumn("最新价", format="%.2f", width="small"),
+        "涨跌幅": st.column_config.NumberColumn("涨跌幅", format="%.2f%%", width="small"),
+        "PE": st.column_config.NumberColumn("PE", format="%.1f", width="small"),
+        "PB": st.column_config.NumberColumn("PB", format="%.2f", width="small"),
+        "ROE": st.column_config.NumberColumn("ROE", format="%.1f%%", width="small"),
+        "净利润同比": st.column_config.NumberColumn("净利同比", format="%.1f%%", width="small"),
+        "毛利率": st.column_config.NumberColumn("毛利率", format="%.1f%%", width="small"),
+        "换手率": st.column_config.NumberColumn("换手率", format="%.2f%%", width="small"),
+        "价值分": st.column_config.NumberColumn("价值分", format="%.1f", width="small"),
+        "技术分": st.column_config.NumberColumn("技术分", format="%.1f", width="small"),
+        "估值分位": st.column_config.NumberColumn("估值分位", format="%.0f%%", width="small"),
+        "_score_pct": st.column_config.ProgressColumn("综合分", format="%.1f", min_value=0, max_value=100, width="medium"),
+        "建议": st.column_config.TextColumn("建议", width="small"),
+    }
+
+    disp_cols = [c for c in show.columns if c != "综合分"]
 
     st.dataframe(
-        show.style.background_gradient(subset=["综合分"], cmap="RdYlGn", vmin=40, vmax=100)
-        .format({"最新价": "{:.2f}", "PE": "{:.1f}", "PB": "{:.2f}",
-                 "ROE": "{:.1f}", "净利润同比": "{:.1f}", "毛利率": "{:.1f}",
-                 "价值分": "{:.1f}", "技术分": "{:.1f}", "动量60": "{:.1f}%",
-                 "RSI": "{:.0f}", "估值分位": "{:.0f}%", "综合分": "{:.1f}"}, na_rep="—"),
-        use_container_width=True, height=560)
+        show[disp_cols],
+        column_config={k: v for k, v in col_cfg.items() if k in disp_cols},
+        use_container_width=True,
+        height=520,
+        hide_index=True,
+    )
 
     st.download_button("⬇️ 下载完整结果 CSV",
                        df.to_csv(index=False).encode("utf-8-sig"),
                        file_name="选股结果.csv", mime="text/csv")
 
+    # —— 分割线 ——
+    st.markdown('<div style="margin: 1.5rem 0; border-top: 2px solid rgba(102,126,234,0.12);"></div>', unsafe_allow_html=True)
+
     # 个股技术详情
     st.subheader("🔍 个股技术详情")
     options = (view["代码"] + " " + view["名称"]).tolist()
     if options:
-        pick = st.selectbox("选择一只股票查看走势 / 均线 / RSI", options)
+        col_pick, col_empty = st.columns([1, 2])
+        with col_pick:
+            pick = st.selectbox("选择一只股票查看走势 / 均线 / RSI", options, label_visibility="collapsed",
+                                placeholder="🔍 点击选择股票…")
         code = pick.split()[0]
-        with st.spinner("拉取个股历史…"):
+        with st.spinner("📡 拉取个股历史…"):
             h = load_stock(code)
         if h is None or len(h) == 0:
-            st.warning("未取到该股历史数据")
+            st.warning("⚠️ 未取到该股历史数据")
         else:
-            st.info("技术面：" + screener.trend_note(h))
+            # 技术面概览卡片
+            trend = screener.trend_note(h)
+            st.markdown(f"""
+            <div style="background:linear-gradient(135deg, #f8fafc, #f1f5f9); border-radius:14px;
+                        padding:14px 20px; margin:10px 0; border-left:4px solid #667eea;
+                        box-shadow:0 2px 10px rgba(0,0,0,0.04);">
+                <span style="font-weight:600; color:#1a1a2e;">📊 技术面分析：</span>
+                <span style="color:#475569;">{trend}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
             hi = h.set_index("date")
-            st.line_chart(hi[["close", "MA20", "MA60"]], height=280)
-            st.line_chart(hi[["RSI"]], height=160)
+            col_left, col_right = st.columns(2)
+            with col_left:
+                st.caption("📈 价格走势 & 均线")
+                st.line_chart(hi[["close", "MA20", "MA60"]], height=300)
+            with col_right:
+                st.caption("📉 RSI 指标")
+                st.line_chart(hi[["RSI"]], height=300)
 else:
-    st.info("👈 先点左上角「🚀 拉取 / 刷新全市场数据」（首次需联网，约 40~90 秒）。"
-            "拉取后，调整筛选条件 / 风格 / 风控都会**即时重算**，无需重新联网。")
+    # —— 空状态欢迎页 ——
+    st.markdown("""
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;
+                padding: 60px 20px; text-align: center;">
+        <div style="font-size: 4rem; margin-bottom: 20px;">📊</div>
+        <h2 style="color: #1a1a2e; margin-bottom: 12px; font-weight: 700;">欢迎使用 A股选股助手</h2>
+        <p style="color: #64748b; font-size: 1.05rem; max-width: 480px; line-height: 1.7;">
+            点击侧边栏 <strong style="color: #667eea;">🚀 拉取 / 刷新全市场数据</strong> 开始选股<br/>
+            <small>首次需联网，约 40~90 秒。拉取后可即时筛选，无需重新联网。</small>
+        </p>
+        <div style="display:flex; gap: 24px; margin-top: 28px;">
+            <div style="text-align:center;">
+                <div style="font-size:1.8rem;">⚡</div>
+                <div style="font-size:0.8rem; color:#64748b;">实时行情</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="font-size:1.8rem;">📈</div>
+                <div style="font-size:0.8rem; color:#64748b;">技术分析</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="font-size:1.8rem;">💎</div>
+                <div style="font-size:0.8rem; color:#64748b;">价值评估</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="font-size:1.8rem;">🛡️</div>
+                <div style="font-size:0.8rem; color:#64748b;">风险控制</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# —— 底部信息栏 ——
+st.markdown("""
+<div style="text-align:center; padding:20px 0 10px 0; margin-top:30px;
+            border-top:1px solid rgba(102,126,234,0.1);">
+    <span style="color:#94a3b8; font-size:0.78rem;">
+        📡 数据来源：东方财富 / 腾讯 / baostock &nbsp;|&nbsp;
+        仅供研究参考，不构成投资建议 &nbsp;|&nbsp;
+        ⚠️ 投资有风险，入市需谨慎
+    </span>
+</div>
+""", unsafe_allow_html=True)
