@@ -1,0 +1,9 @@
+.baostock_cache/
+venv/
+__pycache__/
+*.pyc
+回测样本.csv
+选股结果.csv
+.DS_Store
+.claude/
+*.log
