@@ -678,6 +678,44 @@ def _valuation_score(pct):
     return _piecewise(pct, [(0, 100), (20, 85), (40, 68), (60, 50), (80, 32), (100, 12)])
 
 
+# ---- 量化多因子（经无偏样本外回测验证的因子）：低波+反彩票+中期反转+价值 ----
+def _zscore(s):
+    s = pd.to_numeric(s, errors="coerce")
+    sd = s.std()
+    if not sd or pd.isna(sd) or sd < 1e-9:
+        return pd.Series(0.0, index=s.index)
+    return ((s - s.mean()) / sd).clip(-3, 3)
+
+
+def quant_composite(df):
+    """低波(20日)+反彩票(月内最大日涨)+中期反转(-动量60)+价值(1/PB)，横截面 z 等权合成，
+    综合分=入围(已增强)股内分位(0-100)。缺某因子用其余、不一票否决；未增强股留 NaN。"""
+    d = df.copy()
+    d["量化分"] = float("nan")
+    enriched = pd.Series(False, index=d.index)
+    for col in ("波动率", "动量60"):
+        if col in d.columns:
+            enriched = enriched | d[col].notna()
+    sub = d[enriched]
+    if len(sub) < 5:          # 入围因子数据太少，无法做横截面分位
+        return d
+    parts = []
+    if "波动率" in sub.columns:
+        parts.append(_zscore(-pd.to_numeric(sub["波动率"], errors="coerce")))
+    if "最大日涨幅" in sub.columns:
+        parts.append(_zscore(-pd.to_numeric(sub["最大日涨幅"], errors="coerce")))
+    if "动量60" in sub.columns:
+        parts.append(_zscore(-pd.to_numeric(sub["动量60"], errors="coerce")))
+    if "PB" in sub.columns:
+        pb = pd.to_numeric(sub["PB"], errors="coerce")
+        parts.append(_zscore((1.0 / pb).where(pb > 0)))
+    if not parts:
+        return d
+    comp = sum(p.fillna(0.0) for p in parts) / len(parts)   # 缺失因子按中性 0
+    d.loc[sub.index, "量化分"] = (comp.rank(pct=True) * 100).round(1)
+    return d
+
+
 # ---- 真实短线技术打分（用 baostock 日线 close 计算，替代东财不通时的 NaN 动量）----
 
 
@@ -706,13 +744,15 @@ def _tech_metrics(closes):
         state = "空头"
     else:
         state = "纠缠"
+    ret20 = s.pct_change().tail(20)
     return {
         "动量20": (last / s.iloc[-21] - 1) * 100,
         "动量60": (last / s.iloc[-61] - 1) * 100,
         "RSI": float(_rsi_wilder(s).iloc[-1]),
         "均线": state,
         "乖离": (last / ma20 - 1) * 100 if ma20 else float("nan"),
-        "波动率": s.pct_change().tail(20).std() * 100,
+        "波动率": ret20.std() * 100,
+        "最大日涨幅": ret20.max() * 100,   # 反彩票因子（量化多因子用）
         "_last": last, "_ma20": ma20, "_ma60": ma60,
     }
 
@@ -861,6 +901,8 @@ def score(df, yago_roe=None):
     df["估值分"] = 50.0
     df["RSI"] = float("nan")
     df["均线"] = ""
+    df["波动率"] = float("nan")
+    df["最大日涨幅"] = float("nan")
     df["综合分"] = _composite(df["价值分"], df["技术分"], df["估值分"])
     df["建议"] = df["综合分"].apply(_advice)
     return df
@@ -948,7 +990,7 @@ def rescore(df, profile="长线价值", enrich=None):
     df = df.copy()
     if enrich:
         turn = dict(zip(df["代码"], df["换手率"]))
-        pmap, tmap, mom, rsi, ma = {}, {}, {}, {}, {}
+        pmap, tmap, mom, rsi, ma, vol, mx = {}, {}, {}, {}, {}, {}, {}
         for c, v in enrich.items():
             if "估值分位" in v:
                 pmap[c] = v["估值分位"]
@@ -958,12 +1000,23 @@ def rescore(df, profile="长线价值", enrich=None):
                 mom[c] = round(m["动量60"], 1)
                 rsi[c] = round(m["RSI"], 1)
                 ma[c] = m["均线"]
+                vol[c] = round(m["波动率"], 2)
+                mx[c] = round(m.get("最大日涨幅", float("nan")), 2)
         df["估值分位"] = df["代码"].map(pmap)
         df["估值分"] = df["估值分位"].apply(_valuation_score)
         df["技术分"] = df["代码"].map(tmap).fillna(df["技术分"]).round(1)
         df["动量60"] = df["代码"].map(mom).fillna(df.get("动量60"))
         df["RSI"] = df["代码"].map(rsi)
         df["均线"] = df["代码"].map(ma)
+        df["波动率"] = df["代码"].map(vol)
+        df["最大日涨幅"] = df["代码"].map(mx)
+
+    if profile == "量化多因子":
+        df = quant_composite(df)
+        df["综合分"] = df["量化分"]
+        df["建议"] = df["综合分"].apply(lambda s: _advice(s) if pd.notna(s) else "—")
+        return df.sort_values("综合分", ascending=False, na_position="last").reset_index(drop=True)
+
     df["综合分"] = _composite(df["价值分"], df["技术分"], df["估值分"], profile)
     df["建议"] = df["综合分"].apply(_advice)
     return df.sort_values("综合分", ascending=False).reset_index(drop=True)

@@ -495,6 +495,15 @@ if ss.loaded:
 
     df = screener.rescore(filtered, profile, ss.enrich)
 
+    # 量化多因子模式完全依赖 baostock 入围因子；取不到时给清晰提示而非空表
+    if profile == "量化多因子" and df["综合分"].notna().sum() == 0:
+        st.warning(
+            "⚠️ 量化多因子需要 baostock 的入围因子数据（低波/反彩票/中期反转），当前一只都没取到。\n\n"
+            "常见原因：baostock 暂时不可用 / 被限流（高频拉取后会临时封 IP）。\n\n"
+            "**怎么办**：① 稍后重新点「拉取 / 刷新全市场数据」重试；"
+            "② 或先切换到「短线波段 / 长线价值」风格（它们对因子缺失有降级，仍可出结果）。")
+        st.stop()
+
     view = df[df["综合分"] >= 72] if only_buy else df
     view = view.head(int(topn))
 
