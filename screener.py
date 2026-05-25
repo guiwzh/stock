@@ -687,9 +687,19 @@ def _zscore(s):
     return ((s - s.mean()) / sd).clip(-3, 3)
 
 
-def quant_composite(df):
+def _zscore_neutral(values, industry):
+    """行业中性化 z 分：先在行业内去均值（消除"银行天然低PB/低波"的行业级偏向），
+    再全样本标准化。industry 为对齐的行业 Series。"""
+    s = pd.to_numeric(values, errors="coerce")
+    if industry is not None:
+        s = s - s.groupby(industry).transform("mean")   # 行业相对
+    return _zscore(s)
+
+
+def quant_composite(df, sector_neutral=True):
     """低波(20日)+反彩票(月内最大日涨)+中期反转(-动量60)+价值(1/PB)，横截面 z 等权合成，
-    综合分=入围(已增强)股内分位(0-100)。缺某因子用其余、不一票否决；未增强股留 NaN。"""
+    综合分=入围(已增强)股内分位(0-100)。缺某因子用其余、不一票否决；未增强股留 NaN。
+    sector_neutral=True 时按行业去均值，避免结果扎堆银行/证券。"""
     d = df.copy()
     d["量化分"] = float("nan")
     enriched = pd.Series(False, index=d.index)
@@ -699,16 +709,21 @@ def quant_composite(df):
     sub = d[enriched]
     if len(sub) < 5:          # 入围因子数据太少，无法做横截面分位
         return d
+    ind = sub["行业"] if (sector_neutral and "行业" in sub.columns) else None
+
+    def z(series):
+        return _zscore_neutral(series, ind)
+
     parts = []
     if "波动率" in sub.columns:
-        parts.append(_zscore(-pd.to_numeric(sub["波动率"], errors="coerce")))
+        parts.append(z(-pd.to_numeric(sub["波动率"], errors="coerce")))
     if "最大日涨幅" in sub.columns:
-        parts.append(_zscore(-pd.to_numeric(sub["最大日涨幅"], errors="coerce")))
+        parts.append(z(-pd.to_numeric(sub["最大日涨幅"], errors="coerce")))
     if "动量60" in sub.columns:
-        parts.append(_zscore(-pd.to_numeric(sub["动量60"], errors="coerce")))
+        parts.append(z(-pd.to_numeric(sub["动量60"], errors="coerce")))
     if "PB" in sub.columns:
         pb = pd.to_numeric(sub["PB"], errors="coerce")
-        parts.append(_zscore((1.0 / pb).where(pb > 0)))
+        parts.append(z((1.0 / pb).where(pb > 0)))
     if not parts:
         return d
     comp = sum(p.fillna(0.0) for p in parts) / len(parts)   # 缺失因子按中性 0

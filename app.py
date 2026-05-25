@@ -457,6 +457,9 @@ with st.sidebar:
     with st.expander("👁️ 展示选项", expanded=False):
         only_buy = st.checkbox("只看「值得买入」及以上", value=True)
         topn = st.number_input("展示数量", 10, 500, 50, step=10)
+        max_per_ind = st.slider("每行业最多（只，0=不限）", 0, 20, 3, step=1,
+                                help="低PB/低波动等因子天然偏爱银行证券，扎堆金融。"
+                                     "限制每行业只数可强制分散。")
 
 if go:
     progress_bar = st.progress(0, text="⏳ 连接行情接口…")
@@ -505,6 +508,9 @@ if ss.loaded:
         st.stop()
 
     view = df[df["综合分"] >= 72] if only_buy else df
+    # 行业分散：每行业最多保留 max_per_ind 只（view 已按综合分降序，保留各行业最优的）
+    if max_per_ind and "行业" in view.columns:
+        view = view.groupby("行业", sort=False, group_keys=False).head(int(max_per_ind))
     view = view.head(int(topn))
 
     # —— 指标仪表盘 ——
