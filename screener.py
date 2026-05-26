@@ -561,6 +561,8 @@ def enrich_shortlist(rows, years=5, progress_cb=None, max_seconds=240):
                 info = {}
                 pb = pd.to_numeric(pd.Series(pbs), errors="coerce").dropna()
                 pb = pb[pb > 0]
+                if len(pb) >= 1:
+                    info["pb_eod"] = round(float(pb.iloc[-1]), 3)  # 收盘 PB，盘中不变
                 if len(pb) >= 60:
                     cur = pb.iloc[-1]
                     info["估值分位"] = round(float((pb < cur).mean() * 100), 1)
@@ -721,8 +723,12 @@ def quant_composite(df, sector_neutral=True):
         parts.append(z(-pd.to_numeric(sub["最大日涨幅"], errors="coerce")))
     if "动量60" in sub.columns:
         parts.append(z(-pd.to_numeric(sub["动量60"], errors="coerce")))
-    if "PB" in sub.columns:
-        pb = pd.to_numeric(sub["PB"], errors="coerce")
+    # 价值因子优先用收盘 PB(PB_EOD)，盘中不变；缺失才退回实时 PB
+    pb_col = "PB_EOD" if ("PB_EOD" in sub.columns and sub["PB_EOD"].notna().any()) else "PB"
+    if pb_col in sub.columns:
+        pb = pd.to_numeric(sub[pb_col], errors="coerce")
+        if pb_col == "PB_EOD" and "PB" in sub.columns:   # PB_EOD 个别缺失时用实时补
+            pb = pb.fillna(pd.to_numeric(sub["PB"], errors="coerce"))
         parts.append(z((1.0 / pb).where(pb > 0)))
     if not parts:
         return d
@@ -998,6 +1004,24 @@ def apply_filters(df, exclude_st=True, exclude_loss=True, min_mktcap_yi=20,
     return df
 
 
+def select_pool(df, n, profile="长线价值"):
+    """选「入围精算池」（决定哪些股去 baostock 算因子）。
+    - 量化多因子：按【成交额分行业分层】取——各行业最具流动性的先入池、逐档轮取，
+      universe 行业均衡、有代表性，不被价值分预筛成"全是银行"；
+    - 短线/长线：按价值分 top n（这两个模式本就价值主导）。
+    返回子 DataFrame。"""
+    if len(df) <= n:
+        return df
+    if profile == "量化多因子" and "行业" in df.columns:
+        d = df.copy()
+        d["_amt"] = pd.to_numeric(d.get("成交额"), errors="coerce").fillna(0.0)
+        ind = d["行业"].fillna("其他")
+        d["_r"] = d["_amt"].groupby(ind).rank(ascending=False, method="first")
+        out = d.sort_values(["_r", "_amt"], ascending=[True, False]).head(int(n))
+        return out.drop(columns=["_amt", "_r"])
+    return df.sort_values("价值分", ascending=False).head(int(n))
+
+
 def rescore(df, profile="长线价值", enrich=None):
     """按风格权重重算综合分并排序。若给 enrich({code:{"估值分位","metrics"}})，
     则回填入围股的 估值分位、按风格现算的真实技术分、以及 动量60/RSI/均线 展示列。
@@ -1005,10 +1029,12 @@ def rescore(df, profile="长线价值", enrich=None):
     df = df.copy()
     if enrich:
         turn = dict(zip(df["代码"], df["换手率"]))
-        pmap, tmap, mom, rsi, ma, vol, mx = {}, {}, {}, {}, {}, {}, {}
+        pmap, tmap, mom, rsi, ma, vol, mx, pbe = {}, {}, {}, {}, {}, {}, {}, {}
         for c, v in enrich.items():
             if "估值分位" in v:
                 pmap[c] = v["估值分位"]
+            if "pb_eod" in v:
+                pbe[c] = v["pb_eod"]
             m = v.get("metrics")
             if m is not None:
                 tmap[c] = _real_tech_score(m, turn.get(c), profile)
@@ -1025,6 +1051,7 @@ def rescore(df, profile="长线价值", enrich=None):
         df["均线"] = df["代码"].map(ma)
         df["波动率"] = df["代码"].map(vol)
         df["最大日涨幅"] = df["代码"].map(mx)
+        df["PB_EOD"] = df["代码"].map(pbe)   # 收盘 PB，量化价值因子用它（盘中稳定）
 
     if profile == "量化多因子":
         df = quant_composite(df)
@@ -1055,7 +1082,7 @@ def run_screen(exclude_st=True, exclude_loss=True, min_mktcap_yi=20,
     enr = None
     if val_top and len(df):
         _cb("入围增强", "对入围股计算估值分位 + 真实短线技术（baostock）…", 96)
-        sl = df.sort_values("价值分", ascending=False).head(int(val_top))
+        sl = select_pool(df, int(val_top), profile)
         enr = enrich_shortlist(
             sl[["代码", "换手率"]],
             progress_cb=lambda d, p: _cb("入围增强", d, 96 + int(p * 3)))

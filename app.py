@@ -488,7 +488,8 @@ if ss.loaded:
         exclude_halt=exclude_halt, avoid_limit=avoid_limit, min_amount_yi=min_amount)
 
     # —— 入围精算：仅对尚未算过的代码查 baostock（per-code 缓存）——
-    shortlist = filtered.sort_values("价值分", ascending=False).head(VAL_TOP)["代码"].tolist()
+    # 量化模式按成交额分行业分层选池（代表性+行业均衡）；其余按价值分
+    shortlist = screener.select_pool(filtered, VAL_TOP, profile)["代码"].tolist()
     missing = [c for c in shortlist if c not in ss.enrich_tried]
     if missing:
         with st.spinner(f"精算入围股 {len(missing)} 只（估值分位 + 真实短线技术，baostock）…"):
