@@ -690,11 +690,14 @@ def _zscore(s):
 
 
 def _zscore_neutral(values, industry):
-    """行业中性化 z 分：先在行业内去均值（消除"银行天然低PB/低波"的行业级偏向），
-    再全样本标准化。industry 为对齐的行业 Series。"""
+    """行业中性化 z 分：在行业内去均值（消除"银行天然低PB/低波"的行业级偏向）再标准化。
+    仅对样本≥3 的行业去均值；样本不足的行业保留原值，避免"单只行业去均值塌成 0"。"""
     s = pd.to_numeric(values, errors="coerce")
     if industry is not None:
-        s = s - s.groupby(industry).transform("mean")   # 行业相对
+        g = s.groupby(industry)
+        means = g.transform("mean")
+        counts = g.transform("count")
+        s = s.where(counts < 3, s - means)   # count<3 保留原值；count>=3 行业内去均值
     return _zscore(s)
 
 
@@ -1013,12 +1016,15 @@ def select_pool(df, n, profile="长线价值"):
     if len(df) <= n:
         return df
     if profile == "量化多因子" and "行业" in df.columns:
+        # 按成交额降序，每行业最多留 per_cap 只（保证行业内有深度做中性化，又不过度集中）
         d = df.copy()
         d["_amt"] = pd.to_numeric(d.get("成交额"), errors="coerce").fillna(0.0)
         ind = d["行业"].fillna("其他")
-        d["_r"] = d["_amt"].groupby(ind).rank(ascending=False, method="first")
-        out = d.sort_values(["_r", "_amt"], ascending=[True, False]).head(int(n))
-        return out.drop(columns=["_amt", "_r"])
+        d = d.sort_values("_amt", ascending=False)
+        per_cap = max(3, int(n) // 12)
+        d["_ic"] = d.groupby(ind, sort=False).cumcount()
+        out = d[d["_ic"] < per_cap].head(int(n))
+        return out.drop(columns=["_amt", "_ic"])
     return df.sort_values("价值分", ascending=False).head(int(n))
 
 
