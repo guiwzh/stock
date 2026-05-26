@@ -645,6 +645,124 @@ if ss.loaded:
                        df.to_csv(index=False).encode("utf-8-sig"),
                        file_name="选股结果.csv", mime="text/csv")
 
+    # —— 为什么入选（量化模式因子拆解，让排名可解释）——
+    if profile == "量化多因子" and len(view):
+        with st.expander("🧩 为什么入选（因子拆解）", expanded=False):
+            opts = (view["代码"] + " " + view["名称"]).tolist()
+            pick_q = st.selectbox("选一只看四因子得分", opts, key="quant_why")
+            qrow = view[view["代码"] == pick_q.split()[0]].iloc[0]
+            # (z列, 原始列, 标签, 原始格式, 好的方向说明)
+            specs = [("低波z", "波动率", "低波动", "{:.2f}%", "波动越低越好"),
+                     ("反彩票z", "最大日涨幅", "反彩票", "{:.1f}%", "月内最大日涨越低越好"),
+                     ("反转z", "动量60", "中期反转", "{:.1f}%", "60日动量越低（超跌）越好"),
+                     ("价值z", "PB_EOD", "价值", "{:.2f}", "PB 越低越好")]
+            cs = st.columns(4)
+            for col, (zc, rawc, label, fmt, _hint) in zip(cs, specs):
+                zv, rv = qrow.get(zc), qrow.get(rawc)
+                col.metric(label, fmt.format(rv) if pd.notna(rv) else "—",
+                           f"z {zv:+.2f}" if pd.notna(zv) else "—")
+            strong = [label for (zc, _r, label, *_x) in specs
+                      if pd.notna(qrow.get(zc)) and qrow.get(zc) >= 0.8]
+            weak = [label for (zc, _r, label, *_x) in specs
+                    if pd.notna(qrow.get(zc)) and qrow.get(zc) <= -0.8]
+            msg = f"**综合分 {qrow['综合分']:.0f}**（行业内分位，越高越优）。z 分为**同行业内**相对值，>0 优于同行。"
+            if strong:
+                msg += f"　突出优势：{'、'.join(strong)}。"
+            if weak:
+                msg += f"　短板：{'、'.join(weak)}。"
+            st.caption(msg + "　四因子方向：低波/反彩票/超跌/便宜。")
+
+    # —— 买卖策略：纪律 + 本期建议买入 + 持仓卖出提醒 ——
+    with st.expander("📜 买卖策略（纪律 / 建议买入 / 卖出提醒）", expanded=False):
+        sp1, sp2, sp3, sp4 = st.columns(4)
+        buy_n = sp1.number_input("建议持仓只数", 3, 30, 10, step=1)
+        stop_pct = sp2.number_input("止损线（%）", 3, 50, 12, step=1)
+        take_pct = sp3.number_input("止盈线（%）", 5, 100, 25, step=5)
+        max_hold = sp4.number_input("最长持有（自然日，0=不限）", 0, 365, 90, step=10)
+
+        st.markdown(
+            "**纪律**：① **收盘后/尾盘**运行（盘中价会变）；② 从买入名单取前 N、**等权 + 行业分散**买入；"
+            "③ 卖出触发**任一**：触止损 / 触止盈 / 跌出买入名单 / 超最长持有 / 月度调仓换入更优者。"
+            "　*（风控规则，非投资建议）*")
+
+        # ① 本期建议买入
+        st.markdown("##### ① 本期建议买入（等权）")
+        buy = view.head(int(buy_n))
+        if len(buy):
+            wgt = round(100.0 / len(buy), 1)
+            bdf = buy[["代码", "名称", "行业", "最新价", "综合分"]].reset_index(drop=True).copy()
+            bdf.insert(0, "序", range(1, len(bdf) + 1))
+            bdf["建议仓位%"] = wgt
+            st.dataframe(bdf, use_container_width=True, hide_index=True,
+                         column_config={"最新价": st.column_config.NumberColumn(format="%.2f"),
+                                        "综合分": st.column_config.NumberColumn(format="%.1f"),
+                                        "建议仓位%": st.column_config.NumberColumn(format="%.1f%%")})
+            st.caption(f"取当前买入名单前 {len(buy)} 只，每只约 {wgt}%（已行业分散）。实际请按自身风险/资金调整。")
+        else:
+            st.info("当前无达到买入线（综合分≥72）的标的——可放宽筛选或换风格。")
+
+        # ② 持仓卖出提醒
+        st.markdown("##### ② 持仓卖出提醒")
+        hold_txt = st.text_area(
+            "每行一只：代码 或 代码,买入价 或 代码,买入价,买入日期(YYYY-MM-DD)", height=110,
+            placeholder="600900,25.5,2026-04-10\n601899\n000651,38.0")
+        if hold_txt.strip():
+            import datetime as _dt
+            mkt = ss.market.set_index("代码")
+            scored = df.set_index("代码")
+            recs = []
+            for line in hold_txt.splitlines():
+                line = line.strip().replace("，", ",")
+                if not line:
+                    continue
+                ps = [p.strip() for p in line.split(",")]
+                code = ps[0].zfill(6)
+                buyp = None
+                if len(ps) > 1:
+                    try:
+                        buyp = float(ps[1])
+                    except ValueError:
+                        buyp = None
+                held_days = None
+                if len(ps) > 2:
+                    try:
+                        held_days = (_dt.date.today() - _dt.date.fromisoformat(ps[2])).days
+                    except ValueError:
+                        held_days = None
+                price = float(mkt.loc[code, "最新价"]) if code in mkt.index else float("nan")
+                name = mkt.loc[code, "名称"] if code in mkt.index else "未知"
+                score = (float(scored.loc[code, "综合分"])
+                         if code in scored.index and pd.notna(scored.loc[code, "综合分"]) else float("nan"))
+                ret = (price / buyp - 1) * 100 if (buyp and pd.notna(price)) else float("nan")
+                if pd.notna(ret) and ret <= -stop_pct:
+                    action = "🔴 触止损，卖出"
+                elif pd.notna(ret) and ret >= take_pct:
+                    action = "🟢 触止盈，了结/减仓"
+                elif max_hold and held_days is not None and held_days >= max_hold:
+                    action = f"🟠 持有超{max_hold}天，调仓了结"
+                elif pd.notna(score) and score >= 72:
+                    action = "🟩 继续持有（仍在买入名单）"
+                elif pd.notna(score) and score >= 63:
+                    action = "🟡 转弱，关注/减仓"
+                elif pd.notna(score):
+                    action = "🟠 跌出买入线，建议卖出"
+                else:
+                    action = "⚪ 不在当前名单，建议复核"
+                recs.append({"代码": code, "名称": name,
+                             "现价": round(price, 2) if pd.notna(price) else None,
+                             "买入价": buyp, "持有天": held_days,
+                             "浮动%": round(ret, 1) if pd.notna(ret) else None,
+                             "当前综合分": round(score, 1) if pd.notna(score) else None,
+                             "操作建议": action})
+            st.dataframe(
+                pd.DataFrame(recs), use_container_width=True, hide_index=True,
+                column_config={
+                    "现价": st.column_config.NumberColumn(format="%.2f"),
+                    "浮动%": st.column_config.NumberColumn(format="%.1f%%"),
+                    "当前综合分": st.column_config.NumberColumn(format="%.1f"),
+                    "操作建议": st.column_config.TextColumn(width="large")})
+            st.caption("优先级：止损 > 止盈 > 超期 > 名单状态。**风控规则，非投资建议。**")
+
     # —— 分割线 ——
     st.markdown('<div style="margin: 1.5rem 0; border-top: 2px solid rgba(102,126,234,0.12);"></div>', unsafe_allow_html=True)
 

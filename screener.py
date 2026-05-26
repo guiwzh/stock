@@ -719,24 +719,28 @@ def quant_composite(df, sector_neutral=True):
     def z(series):
         return _zscore_neutral(series, ind)
 
-    parts = []
+    # (展示列名, 因子序列) —— 方向已统一为"越大越好"
+    specs = []
     if "波动率" in sub.columns:
-        parts.append(z(-pd.to_numeric(sub["波动率"], errors="coerce")))
+        specs.append(("低波z", z(-pd.to_numeric(sub["波动率"], errors="coerce"))))
     if "最大日涨幅" in sub.columns:
-        parts.append(z(-pd.to_numeric(sub["最大日涨幅"], errors="coerce")))
+        specs.append(("反彩票z", z(-pd.to_numeric(sub["最大日涨幅"], errors="coerce"))))
     if "动量60" in sub.columns:
-        parts.append(z(-pd.to_numeric(sub["动量60"], errors="coerce")))
+        specs.append(("反转z", z(-pd.to_numeric(sub["动量60"], errors="coerce"))))
     # 价值因子优先用收盘 PB(PB_EOD)，盘中不变；缺失才退回实时 PB
     pb_col = "PB_EOD" if ("PB_EOD" in sub.columns and sub["PB_EOD"].notna().any()) else "PB"
     if pb_col in sub.columns:
         pb = pd.to_numeric(sub[pb_col], errors="coerce")
         if pb_col == "PB_EOD" and "PB" in sub.columns:   # PB_EOD 个别缺失时用实时补
             pb = pb.fillna(pd.to_numeric(sub["PB"], errors="coerce"))
-        parts.append(z((1.0 / pb).where(pb > 0)))
-    if not parts:
+        specs.append(("价值z", z((1.0 / pb).where(pb > 0))))
+    if not specs:
         return d
+    parts = [p for _, p in specs]
     comp = sum(p.fillna(0.0) for p in parts) / len(parts)   # 缺失因子按中性 0
     d.loc[sub.index, "量化分"] = (comp.rank(pct=True) * 100).round(1)
+    for name, p in specs:                                   # 存各因子 z，供「为什么入选」拆解
+        d.loc[sub.index, name] = p.round(2)
     return d
 
 
