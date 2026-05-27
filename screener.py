@@ -773,6 +773,12 @@ def _tech_metrics(closes):
     else:
         state = "纠缠"
     ret20 = s.pct_change().tail(20)
+    # 距年线(MA250)：>0 站上年线(企稳/上升)，<0 跌破年线(确认下跌→防白酒式长跌陷阱)
+    juxianxian = float("nan")
+    if len(s) >= 250:
+        ma250 = s.tail(250).mean()
+        if ma250:
+            juxianxian = (last / ma250 - 1) * 100
     return {
         "动量20": (last / s.iloc[-21] - 1) * 100,
         "动量60": (last / s.iloc[-61] - 1) * 100,
@@ -781,6 +787,7 @@ def _tech_metrics(closes):
         "乖离": (last / ma20 - 1) * 100 if ma20 else float("nan"),
         "波动率": ret20.std() * 100,
         "最大日涨幅": ret20.max() * 100,   # 反彩票因子（量化多因子用）
+        "距年线": juxianxian,              # 长期趋势：>0 站上年线，<0 跌破年线
         "_last": last, "_ma20": ma20, "_ma60": ma60,
     }
 
@@ -931,6 +938,7 @@ def score(df, yago_roe=None):
     df["均线"] = ""
     df["波动率"] = float("nan")
     df["最大日涨幅"] = float("nan")
+    df["距年线"] = float("nan")
     df["综合分"] = _composite(df["价值分"], df["技术分"], df["估值分"])
     df["建议"] = df["综合分"].apply(_advice)
     return df
@@ -1039,7 +1047,7 @@ def rescore(df, profile="长线价值", enrich=None):
     df = df.copy()
     if enrich:
         turn = dict(zip(df["代码"], df["换手率"]))
-        pmap, tmap, mom, rsi, ma, vol, mx, pbe = {}, {}, {}, {}, {}, {}, {}, {}
+        pmap, tmap, mom, rsi, ma, vol, mx, pbe, jxx = {}, {}, {}, {}, {}, {}, {}, {}, {}
         for c, v in enrich.items():
             if "估值分位" in v:
                 pmap[c] = v["估值分位"]
@@ -1053,12 +1061,15 @@ def rescore(df, profile="长线价值", enrich=None):
                 ma[c] = m["均线"]
                 vol[c] = round(m["波动率"], 2)
                 mx[c] = round(m.get("最大日涨幅", float("nan")), 2)
+                jx = m.get("距年线", float("nan"))
+                jxx[c] = round(jx, 1) if pd.notna(jx) else float("nan")
         df["估值分位"] = df["代码"].map(pmap)
         df["估值分"] = df["估值分位"].apply(_valuation_score)
         df["技术分"] = df["代码"].map(tmap).fillna(df["技术分"]).round(1)
         df["动量60"] = df["代码"].map(mom).fillna(df.get("动量60"))
         df["RSI"] = df["代码"].map(rsi)
         df["均线"] = df["代码"].map(ma)
+        df["距年线"] = df["代码"].map(jxx)
         df["波动率"] = df["代码"].map(vol)
         df["最大日涨幅"] = df["代码"].map(mx)
         df["PB_EOD"] = df["代码"].map(pbe)   # 收盘 PB，量化价值因子用它（盘中稳定）

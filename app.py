@@ -459,6 +459,9 @@ with st.sidebar:
                                   help="涨跌停次日可能买不进/卖不出，短线宜回避。")
         min_amount = st.slider("最小成交额（亿元）", 0.0, 20.0, 1.0, step=0.5,
                                help="成交额过低 3 个月内难进出，设流动性下限。")
+        exclude_downtrend = st.checkbox("剔除跌破年线（防长期下跌陷阱）", value=True,
+                                        help="收盘价跌破年线(MA250)=确认下跌趋势，"
+                                             "防白酒式长跌的价值陷阱/接飞刀。回测验证可提升收益。")
 
     # —— 展示选项（折叠）——
     with st.expander("👁️ 展示选项", expanded=False):
@@ -505,6 +508,12 @@ if ss.loaded:
             ss.enrich_tried.update(missing)
 
     df = screener.rescore(filtered, profile, ss.enrich)
+
+    # 长期趋势过滤：剔除已确认跌破年线(距年线<0)的票，防白酒式长跌陷阱；
+    # 距年线缺失(未精算/历史<250日)的不判、保留。
+    if exclude_downtrend and "距年线" in df.columns:
+        jx = pd.to_numeric(df["距年线"], errors="coerce")
+        df = df[~(jx < 0)]
 
     # 量化多因子模式完全依赖 baostock 入围因子；取不到时给清晰提示而非空表
     if profile == "量化多因子" and df["综合分"].notna().sum() == 0:
@@ -586,7 +595,7 @@ if ss.loaded:
         core_cols = ["代码", "名称", "行业", "最新价",
                      "价值分", "技术分", "估值分位", "综合分", "建议"]
     full_cols = ["代码", "名称", "行业", "最新价", "涨跌幅", "PE", "PB", "ROE",
-                 "净利润同比", "毛利率", "换手率", "波动率", "最大日涨幅",
+                 "净利润同比", "毛利率", "换手率", "波动率", "最大日涨幅", "距年线",
                  "价值分", "技术分", "动量60", "RSI", "均线", "估值分位", "综合分", "建议"]
     show_cols = full_cols if show_all else core_cols
     available = [c for c in show_cols if c in view.columns]
@@ -625,6 +634,7 @@ if ss.loaded:
         "均线": st.column_config.TextColumn("均线", width="small"),
         "波动率": st.column_config.NumberColumn("20日波动%", format="%.2f", width="small"),
         "最大日涨幅": st.column_config.NumberColumn("月内最大日涨%", format="%.1f", width="small"),
+        "距年线": st.column_config.NumberColumn("距年线%", format="%.1f", width="small"),
         "估值分位": st.column_config.NumberColumn("估值分位", format="%.0f%%", width="small"),
         "_score_pct": st.column_config.ProgressColumn("综合分", format="%.1f", min_value=0, max_value=100, width="medium"),
         "建议": st.column_config.TextColumn("建议", width="medium"),
