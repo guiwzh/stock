@@ -985,10 +985,14 @@ def fetch_market(progress_cb=None):
         progress_cb=lambda d, p: _cb("基本面", d, 70 + int(p * 0.25)))
 
     _cb("打分", "正在计算价值/技术得分…", 95)
+    # 上游 push2/yjbb 偶有同代码重复行(分页/拼接遗留)；先各自去重再 merge，确保最终唯一
+    spot = spot.drop_duplicates(subset=["代码"], keep="first")
+    fund = fund.drop_duplicates(subset=["代码"], keep="first")
     df = spot.merge(fund, on="代码", how="inner")
     # 结构性清洗：有效价 + 仅沪深主板(排除科创板/创业板/北交所/B股)
     df = df[df["最新价"].notna() & (df["最新价"] > 0)]
     df = df[df["代码"].str.match(r"^(60|00)\d{4}$")]
+    df = df.drop_duplicates(subset=["代码"], keep="first")    # 兜底再保险
     df = score(df, yago_roe)
     # 短线风控标记（成交额<=0 视为停牌/无成交；涨跌幅触及主板涨跌停）
     amt = df["成交额"] if "成交额" in df.columns else pd.Series(float("nan"), index=df.index)
