@@ -1005,8 +1005,10 @@ def fetch_market(progress_cb=None):
 def apply_filters(df, exclude_st=True, exclude_loss=True, min_mktcap_yi=20,
                   min_roe=None, max_pe=None, exclude_halt=True,
                   avoid_limit=False, min_amount_yi=0):
-    """对 fetch_market 的结果做用户级筛选（纯本地、秒级）。风控项在对应列存在时才生效。"""
+    """对 fetch_market 的结果做用户级筛选（纯本地、秒级）。风控项在对应列存在时才生效。
+    在 df.attrs['filter_stats'] 写各阶段统计（如 nan_roe_dropped），供 UI 透明展示。"""
     df = df.copy()
+    stats = {}
     if exclude_st:
         df = df[~df["名称"].str.contains("ST|退", case=False, na=False)]
     if exclude_loss:
@@ -1014,7 +1016,10 @@ def apply_filters(df, exclude_st=True, exclude_loss=True, min_mktcap_yi=20,
     if min_mktcap_yi:
         df = df[df["总市值"] >= min_mktcap_yi * 1e8]
     if min_roe is not None:
-        df = df[df["ROE"] >= min_roe]
+        # 统计因 ROE NaN 被静默剔除的票数（NaN >= 数 → False，会被丢）
+        roe = pd.to_numeric(df["ROE"], errors="coerce")
+        stats["nan_roe_dropped"] = int(roe.isna().sum())
+        df = df[roe >= min_roe]
     if max_pe is not None:
         df = df[df["PE"] <= max_pe]
     # —— 短线风控 ——
@@ -1024,6 +1029,7 @@ def apply_filters(df, exclude_st=True, exclude_loss=True, min_mktcap_yi=20,
         df = df[df["涨跌停"].fillna("") == ""]
     if min_amount_yi and "成交额" in df.columns:
         df = df[pd.to_numeric(df["成交额"], errors="coerce").fillna(0) >= min_amount_yi * 1e8]
+    df.attrs["filter_stats"] = stats
     return df
 
 

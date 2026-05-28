@@ -459,9 +459,10 @@ with st.sidebar:
                                   help="涨跌停次日可能买不进/卖不出，短线宜回避。")
         min_amount = st.slider("最小成交额（亿元）", 0.0, 20.0, 1.0, step=0.5,
                                help="成交额过低 3 个月内难进出，设流动性下限。")
-        exclude_downtrend = st.checkbox("剔除跌破年线（防长期下跌陷阱）", value=True,
-                                        help="收盘价跌破年线(MA250)=确认下跌趋势，"
-                                             "防白酒式长跌的价值陷阱/接飞刀。回测验证可提升收益。")
+        exclude_downtrend = st.checkbox("剔除跌破年线（含未验证的，严格模式）", value=True,
+                                        help="收盘价跌破年线(MA250)=确认下跌趋势，防白酒式长跌陷阱。"
+                                             "严格模式：未精算/历史不足无法验证年线状态的票也一并剔除，"
+                                             "避免短线/长线模式下下跌股从'未验证'漏过。回测验证有效。")
 
     # —— 展示选项（折叠）——
     with st.expander("👁️ 展示选项", expanded=False):
@@ -509,11 +510,13 @@ if ss.loaded:
 
     df = screener.rescore(filtered, profile, ss.enrich)
 
-    # 长期趋势过滤：剔除已确认跌破年线(距年线<0)的票，防白酒式长跌陷阱；
-    # 距年线缺失(未精算/历史<250日)的不判、保留。
+    # 长期趋势过滤（严格模式）：要求距年线 >= 0；NaN(未精算/历史<250日)也剔除——
+    # 修复短线/长线模式下"非入围股距年线NaN→漏过过滤"的盲点。
+    n_before_trend = len(df)
     if exclude_downtrend and "距年线" in df.columns:
         jx = pd.to_numeric(df["距年线"], errors="coerce")
-        df = df[~(jx < 0)]
+        df = df[jx >= 0]                # 严格：跌破年线 和 距年线NaN 都剔除
+    n_trend_dropped = n_before_trend - len(df)
 
     # 量化多因子模式完全依赖 baostock 入围因子；取不到时给清晰提示而非空表
     if profile == "量化多因子" and df["综合分"].notna().sum() == 0:
@@ -529,6 +532,17 @@ if ss.loaded:
     if max_per_ind and "行业" in view.columns:
         view = view.groupby("行业", sort=False, group_keys=False).head(int(max_per_ind))
     view = view.head(int(topn))
+
+    # —— 透明提示：过滤过程中默默剔除的票数（避免"看不到"）——
+    notes = []
+    fs = filtered.attrs.get("filter_stats", {})
+    nan_roe = int(fs.get("nan_roe_dropped", 0))
+    if nan_roe > 0:
+        notes.append(f"📋 因 ROE 数据缺失被 `min_roe≥{min_roe}` 过滤静默剔除：**{nan_roe}** 只（多为数据不全/新上市）")
+    if exclude_downtrend and n_trend_dropped > 0:
+        notes.append(f"📉 因「跌破年线 / 未验证年线」被趋势过滤剔除：**{n_trend_dropped}** 只（防长期下跌陷阱+严格模式）")
+    if notes:
+        st.info("　|　".join(notes))
 
     # —— 指标仪表盘 ——
     c1, c2, c3, c4 = st.columns(4)
@@ -594,9 +608,14 @@ if ss.loaded:
     else:
         core_cols = ["代码", "名称", "行业", "最新价",
                      "价值分", "技术分", "估值分位", "综合分", "建议"]
+    # 「显示全部字段」基础列（所有股票都有值，避免一片 None）
     full_cols = ["代码", "名称", "行业", "最新价", "涨跌幅", "PE", "PB", "ROE",
-                 "净利润同比", "毛利率", "换手率", "波动率", "最大日涨幅", "距年线",
-                 "价值分", "技术分", "动量60", "RSI", "均线", "估值分位", "综合分", "建议"]
+                 "净利润同比", "毛利率", "换手率",
+                 "价值分", "技术分", "估值分位"]
+    # 量化模式下追加因子列（这些字段对入围股都有值；其他模式入围才有→全表会大量 None，故只在量化加）
+    if profile == "量化多因子":
+        full_cols += ["波动率", "最大日涨幅", "距年线", "动量60", "RSI", "均线"]
+    full_cols += ["综合分", "建议"]
     show_cols = full_cols if show_all else core_cols
     available = [c for c in show_cols if c in view.columns]
     show = view[available].reset_index(drop=True).copy()
