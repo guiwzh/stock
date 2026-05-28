@@ -1,0 +1,14 @@
+# Streamlit 主题：统一控件强调色为靛蓝（与标题边框/按钮一致），
+# 取代默认的红色（勾选框/滑块/进度条等）。
+[theme]
+primaryColor = "#667eea"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f1f5f9"
+textColor = "#1a1a2e"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+runOnSave = false

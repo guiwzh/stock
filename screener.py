@@ -689,15 +689,19 @@ def _zscore(s):
     return ((s - s.mean()) / sd).clip(-3, 3)
 
 
+_NEUTRAL_MIN_MEMBERS = 5   # 行业内有效样本≥此数才做中性化；少于此用全样本 z（防"陪跑放大"）
+
+
 def _zscore_neutral(values, industry):
-    """行业中性化 z 分：在行业内去均值（消除"银行天然低PB/低波"的行业级偏向）再标准化。
-    仅对样本≥3 的行业去均值；样本不足的行业保留原值，避免"单只行业去均值塌成 0"。"""
+    """行业中性化 z 分：行业内去均值消除"银行天然低PB/低波"的行业级偏向，再标准化。
+    仅对样本≥_NEUTRAL_MIN_MEMBERS(=5) 的行业去均值；不足的行业**保留原值**走全样本 z——
+    避免"行业内 2-3 只陪跑被放大成极端 z"（1 天名次剧跳的主因之一）。"""
     s = pd.to_numeric(values, errors="coerce")
     if industry is not None:
         g = s.groupby(industry)
         means = g.transform("mean")
         counts = g.transform("count")
-        s = s.where(counts < 3, s - means)   # count<3 保留原值；count>=3 行业内去均值
+        s = s.where(counts < _NEUTRAL_MIN_MEMBERS, s - means)
     return _zscore(s)
 
 
